@@ -28,13 +28,18 @@
 > 
 
 
-
 ### 效果展示
 
 ![mnggiflab-compressed-lqy83-miqwy (1)-min](https://github.com/eeeeeeeeee-code/e0e1-wx/assets/115862499/24a56b9f-29fb-4fee-9112-fdd125824f0d)
 
 
-
+### 功能优化
+> 查看https://github.com/eeeeeeeeee-code/wx-hook
+>
+> 1. 解决高版本没有偏移码无法hook的问题
+>
+> 2. 解决部分同志不会抓小程序包的问题
+>    
 ### config.yaml文件解释
 
 ```
