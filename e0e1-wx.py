@@ -26,7 +26,7 @@ from yaml import safe_load
 from time import sleep
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests_toolbelt import MultipartEncoder
-
+import jsbeautifier
 
 requests.packages.urllib3.disable_warnings()
 
@@ -392,43 +392,54 @@ class Wx_tools:
             return True
 
     def monitor_new_wx(self, timeout=0.2):
-        try:
-            original_dirs = {entry.name for entry in os.scandir(self.root_path) if entry.is_dir()}
-            sleep(timeout)
-            new_dirs = {entry.name for entry in os.scandir(self.root_path) if entry.is_dir()}
-            new_folders = new_dirs - original_dirs
-            for folder in new_folders:
-                wx_window_info = WX_HOOK().get_wechat_windows_info()
-                window_text, pid, process_name = wx_window_info[0]
-                if window_text == "HintWnd":
-                    print(CONFIG_YAML.Colored().blue("\n检测到HintWnd，代表没有抓到小程序名，为不影响程序，这里使用随机数"))
-                    window_text = window_text + "-" + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
-                folder_file = "./result/{}".format(window_text)
-                wxapkg_file = self.wx_file_wxapkg(self.root_path2 + '\\' + folder)
-                if os.path.isdir(folder_file):
-                    print(CONFIG_YAML.Colored().green(f"\n《{window_text}》文件已经存在"))
+        original_dirs = {entry.name for entry in os.scandir(self.root_path) if entry.is_dir()}
+        sleep(timeout)
+        new_dirs = {entry.name for entry in os.scandir(self.root_path) if entry.is_dir()}
+        new_folders = new_dirs - original_dirs
+        for folder in new_folders:
+            wx_window_info = WX_HOOK().get_wechat_windows_info()
+            if len(wx_window_info) == 0:
+                print(CONFIG_YAML.Colored().red("没有检测到微信小程序窗口"))
+                continue
+            window_text, pid, process_name = wx_window_info[0]
+            if window_text == "HintWnd":
+                print(CONFIG_YAML.Colored().blue("\n检测到HintWnd，代表没有抓到小程序名，为不影响程序，这里使用随机数"))
+                window_text = window_text + "-" + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
+            folder_file = "./result/{}".format(window_text)
+            wxapkg_file = self.wx_file_wxapkg(self.root_path2 + '\\' + folder)
+            if os.path.isdir(folder_file):
+                print(CONFIG_YAML.Colored().green(f"\n《{window_text}》文件已经存在"))
+                continue
+
+            print(CONFIG_YAML.Colored().green("\n检测打开了 《{}》小程序正在进行反编译".format(window_text)))
+            os.makedirs(folder_file, exist_ok=True)
+            if self.run_with_retry("{} wx \"{}\" -o \"{}\"".format(self.unveilr, wxapkg_file, folder_file)):
+                files = [files for root, dirs, files in os.walk(wxapkg_file)]
+                if len(files) <= 1:
+                    print(CONFIG_YAML.Colored().red("没有生成对应的wxapkg加密文件,大概率为网络问题"))
                 else:
-                    print(CONFIG_YAML.Colored().green("\n检测打开了 《{}》小程序正在进行反编译".format(window_text)))
-                    os.mkdir(folder_file)
-                    if self.run_with_retry("{} wx \"{}\" -o \"{}\"".format(self.unveilr, wxapkg_file, folder_file)):
-                        files = [files for root, dirs, files in os.walk(wxapkg_file)]
-                        if len(files) <= 1:
-                            print(CONFIG_YAML.Colored().red("没有生成对应的wxapkg加密文件,大概率为网络问题"))
-                        else:
-                            print(CONFIG_YAML.Colored().red("存在wxapkg加密文件，没有反编译成功，请反馈issue"))
-                        os.rmdir(folder_file)
-                        Wx_tools().remove_file_wx()
-                        break
-                    print(CONFIG_YAML.Colored().green("执行完毕-反编译源代码输出: {}".format(folder_file)))
+                    print(CONFIG_YAML.Colored().red("存在wxapkg加密文件，没有反编译成功，请反馈issue"))
+                os.rmdir(folder_file)
+                Wx_tools().remove_file_wx()
+                break
+            
+            for root, _, files in os.walk(folder_file):
+                for f in files:
+                    if not f.endswith(".js"):
+                        continue
+                    file_path = os.path.join(root, f)
+                    res = jsbeautifier.beautify_file(file_path)
+                    fp = open(file_path, 'w', encoding='utf-8')
+                    fp.write(res)
+                    fp.close()
+            print(CONFIG_YAML.Colored().green("执行完毕-反编译源代码输出: {}".format(folder_file)))
 
-                    if args.devtools_hook:
-                        thread = threading.Thread(target=run_wechat_hook)
-                        thread.start()
+            if args.devtools_hook:
+                thread = threading.Thread(target=run_wechat_hook)
+                thread.start()
 
-                    LargeFileProcessor().path_process_directory(folder_file, folder_file,window_text)
-        except Exception as e:
-            print(CONFIG_YAML.Colored().red("Wx_tools/monitor_new_wx bug: {}".format(e)))
-
+            LargeFileProcessor().path_process_directory(folder_file, folder_file,window_text)
+           
 
 class WX_HOOK:
     def __init__(self, js_path=r"./tools/WeChatAppEx.exe.js"):
@@ -616,4 +627,7 @@ if __name__ == "__main__":
     wx_tools.remove_file_wx()
     print(CONFIG_YAML.Colored().magenta("e0e1-wx工具初始化成功~~\n注:不要快速切换小程序~~"))
     while True:
-        wx_tools.monitor_new_wx()
+        try:
+            wx_tools.monitor_new_wx()
+        except Exception as e:
+            print(CONFIG_YAML.Colored().red("Wx_tools/monitor_new_wx bug: {}".format(e)))
